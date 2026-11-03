@@ -5,6 +5,7 @@ export const ACCESS_POLICIES = Object.freeze({
   payments: ["saas.control.access"],
   venues: ["saas.control.access"],
   gateways: ["saas.control.access"],
+  support: ["saas.control.access"],
   settings: ["saas.control.access"],
 });
 

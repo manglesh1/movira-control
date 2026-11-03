@@ -387,6 +387,15 @@ export const moviraControlApi = baseApi.injectEndpoints({
         responseHandler: (response) => response.text(),
       }),
     }),
+    // Languages the park may offer (max 2) and its default / guest languages.
+    updateSaasParkLanguages: builder.mutation({
+      query: ({ locationId, defaultLocale, additionalLocale }) => ({
+        url: `/saas/parks/${locationId}/languages`,
+        method: "PATCH",
+        body: { defaultLocale, additionalLocale: additionalLocale || null },
+      }),
+      invalidatesTags: (result, error, { locationId }) => ["SaasControl", { type: "SaasControl", id: locationId }, { type: "SaasControl", id: `audit-${locationId}` }],
+    }),
     updateSaasParkOnboarding: builder.mutation({
       query: ({ locationId, onboarding, ticketControls }) => ({
         url: `/saas/parks/${locationId}/onboarding`,
@@ -479,6 +488,7 @@ export const {
   useRefundSaasInvoicePaymentMutation,
   useLazyGetSaasInvoiceDocumentQuery,
   useUpdateSaasParkOnboardingMutation,
+  useUpdateSaasParkLanguagesMutation,
   useDeleteSaasParkMutation,
   useLazyGetSaasParkPermanentDeletePreviewQuery,
   usePermanentDeleteSaasParkMutation,

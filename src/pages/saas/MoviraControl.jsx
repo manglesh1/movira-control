@@ -14,6 +14,7 @@ import {
   FaEnvelope,
   FaFileInvoiceDollar,
   FaEye,
+  FaGlobe,
   FaLayerGroup,
   FaLock,
   FaMapMarkerAlt,
@@ -60,6 +61,7 @@ import {
   useUpdateSaasParkModulesMutation,
   useUpdateSaasParkMutation,
   useUpdateSaasParkOnboardingMutation,
+  useUpdateSaasParkLanguagesMutation,
   useUpdateSaasParkPaymentsMutation,
   useUpdateSaasModuleMutation,
   useUpdateSaasPlanMutation,
@@ -110,6 +112,8 @@ const defaultForm = {
   country: "",
   timezone: "",
   currency: "",
+  defaultLocale: "en-CA",
+  additionalLocale: "",
   customerTaxName: "",
   customerTaxPercent: "",
   customerTaxCalculation: "add_to_price",
@@ -2067,6 +2071,11 @@ export function ParkForm() {
         country: park.country || "",
         timezone: park.timezone || "",
         currency: park.currency || "",
+        defaultLocale: park.languages?.defaultLocale || "en-CA",
+        additionalLocale:
+          (park.languages?.allowed || park.languages?.supportedLocales || []).find(
+            (code) => code !== (park.languages?.defaultLocale || "en-CA")
+          ) || "",
         customerTaxName: park.customerTax?.name || "",
         customerTaxPercent: park.customerTax?.percent ?? "",
         customerTaxCalculation: park.customerTax?.calculation || "add_to_price",
@@ -2622,6 +2631,36 @@ export function ParkForm() {
                 <span className="text-xs font-black uppercase text-stone-500">Currency *</span>
                 <input value={form.currency} readOnly required className="input-nexus mt-1 w-full bg-stone-50 px-3 py-2.5 text-sm text-stone-600" />
               </label>
+              <label className="block">
+                <span className="text-xs font-black uppercase text-stone-500">Default language *</span>
+                <select
+                  value={form.defaultLocale}
+                  onChange={(event) => {
+                    const next = event.target.value;
+                    update("defaultLocale", next);
+                    if (form.additionalLocale === next) update("additionalLocale", "");
+                  }}
+                  className="input-nexus mt-1 w-full px-3 py-2.5 text-sm"
+                >
+                  {PARK_LANGUAGE_CODES.map((code) => (
+                    <option key={code} value={code}>{languageName(code)}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="block">
+                <span className="text-xs font-black uppercase text-stone-500">Additional language</span>
+                <select
+                  value={form.additionalLocale}
+                  onChange={(event) => update("additionalLocale", event.target.value)}
+                  className="input-nexus mt-1 w-full px-3 py-2.5 text-sm"
+                >
+                  <option value="">None</option>
+                  {PARK_LANGUAGE_CODES.filter((code) => code !== form.defaultLocale).map((code) => (
+                    <option key={code} value={code}>{languageName(code)}</option>
+                  ))}
+                </select>
+              </label>
+              <p className="md:col-span-3 text-xs font-semibold text-stone-600">The park can use only these languages. Staff screens and tills use the default; guests can choose the additional language for booking pages, waivers, emails and offers.</p>
               <p className="md:col-span-3 text-xs font-semibold text-stone-600">All session dates, booking windows and staff-facing times use this location timezone—not the customer's or server's clock.</p>
               <div className="md:col-span-3 rounded-xl border border-stone-200 bg-stone-50 p-4">
                 <p className="text-xs font-black uppercase tracking-wider text-violet-700">Customer sales tax *</p>
@@ -2800,6 +2839,12 @@ export function ParkDetail() {
       actions={
         <div className="flex w-full flex-wrap gap-2 sm:w-auto">
           <Link to="/movira-control/parks" className={buttonClass("secondary", "flex-1 sm:flex-none")}><FaArrowLeft /> Locations</Link>
+          <Link
+            to={parkSectionHref(park.locationId, "languages")}
+            className={buttonClass(section === "languages" ? "primary" : "secondary", "flex-1 sm:flex-none")}
+          >
+            <FaGlobe /> Languages
+          </Link>
           <Link to={`/movira-control/parks/${park.locationId}/edit`} className={buttonClass("primary", "flex-1 sm:flex-none")}><FaEdit /> Edit</Link>
         </div>
       }
@@ -2835,8 +2880,124 @@ export function ParkDetail() {
       {section === "billing-history" ? <InvoiceHistoryTable park={park} invoices={invoices} paymentEvents={paymentEvents} /> : null}
       {section === "onboarding" ? <OnboardingPanel park={park} /> : null}
       {section === "audit" ? <AuditPanel park={park} initialLogs={auditLogs} /> : null}
+      {section === "languages" ? <LanguagesPanel park={park} /> : null}
       {!section ? <OverviewPanel park={park} /> : null}
     </ControlShell>
+  );
+}
+
+// ── Languages ────────────────────────────────────────────────────────
+// Movira Control decides which languages a park may offer (max 2). The park
+// then turns guest languages on or off itself, inside that list, in the
+// admin app (Locations → Edit). Control can also set the park's default and
+// guest languages here, e.g. during onboarding.
+
+// Languages a park can be given (keep in sync with the backend's PARK_LOCALES).
+const PARK_LANGUAGE_CODES = [
+  "en-CA", "fr-CA", "es-MX", "pt-BR", "de-DE", "it-IT", "nl-NL", "pl-PL",
+  "ru-RU", "tr-TR", "ar-SA", "hi-IN", "zh-CN", "ja-JP", "ko-KR",
+];
+
+// Shown by language only (one entry each): "French", not "Canadian French".
+function languageName(code) {
+  const base = String(code || "").split("-")[0];
+  try {
+    const name = new Intl.DisplayNames(["en"], { type: "language" }).of(base);
+    return name || code;
+  } catch {
+    return code;
+  }
+}
+
+function parkLanguagesSummary(park) {
+  const languages = park.languages;
+  if (!languages) return "-";
+  const offered = (languages.supportedLocales || []).map(languageName).join(" + ");
+  return languages.allowed ? offered : `${offered} (any allowed)`;
+}
+
+function LanguagesPanel({ park }) {
+  const languages = park.languages || {};
+  const [updateLanguages, updateState] = useUpdateSaasParkLanguagesMutation();
+  const currentDefault = languages.defaultLocale || "en-CA";
+  const currentAdditional =
+    (languages.allowed || languages.supportedLocales || []).find((code) => code !== currentDefault) || "";
+  const [defaultLocale, setDefaultLocale] = useState(currentDefault);
+  const [additionalLocale, setAdditionalLocale] = useState(currentAdditional);
+  useEffect(() => {
+    setDefaultLocale(currentDefault);
+    setAdditionalLocale(currentAdditional);
+  }, [park.locationId, currentDefault, currentAdditional]);
+  const dirty = defaultLocale !== currentDefault || additionalLocale !== currentAdditional;
+
+  const save = async () => {
+    try {
+      await updateLanguages({ locationId: park.locationId, defaultLocale, additionalLocale: additionalLocale || null }).unwrap();
+      toast.success("Languages saved.");
+    } catch (err) {
+      toast.error(err?.data?.message || "Failed to save languages.");
+    }
+  };
+
+  return (
+    <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
+      <section className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm">
+        <p className="text-xs font-black uppercase text-violet-700">Languages</p>
+        <h2 className="mt-1 text-xl font-black text-stone-950">Languages for {park.name}</h2>
+        <p className="mt-1 text-sm font-semibold text-stone-600">
+          One default language and, if needed, one additional language. The park can use only these.
+        </p>
+        <div className="mt-5 grid gap-4 md:grid-cols-2">
+          <label className="block">
+            <span className="text-xs font-black uppercase text-stone-500">Default language *</span>
+            <select
+              value={defaultLocale}
+              onChange={(event) => {
+                const next = event.target.value;
+                setDefaultLocale(next);
+                if (additionalLocale === next) setAdditionalLocale("");
+              }}
+              className="input-nexus mt-1 w-full px-3 py-2.5 text-sm"
+            >
+              {PARK_LANGUAGE_CODES.map((code) => (
+                <option key={code} value={code}>{languageName(code)}</option>
+              ))}
+            </select>
+            <span className="mt-1 block text-xs font-semibold text-stone-500">Tills, staff screens and park-wide emails.</span>
+          </label>
+          <label className="block">
+            <span className="text-xs font-black uppercase text-stone-500">Additional language</span>
+            <select
+              value={additionalLocale}
+              onChange={(event) => setAdditionalLocale(event.target.value)}
+              className="input-nexus mt-1 w-full px-3 py-2.5 text-sm"
+            >
+              <option value="">None</option>
+              {PARK_LANGUAGE_CODES.filter((code) => code !== defaultLocale).map((code) => (
+                <option key={code} value={code}>{languageName(code)}</option>
+              ))}
+            </select>
+            <span className="mt-1 block text-xs font-semibold text-stone-500">Guests can choose it for booking pages, waivers, emails and offers.</span>
+          </label>
+        </div>
+        <div className="mt-6 flex flex-wrap items-center gap-3">
+          <button type="button" onClick={save} disabled={!dirty || updateState.isLoading} className={buttonClass("primary", "disabled:opacity-50")}>
+            {updateState.isLoading ? "Saving…" : "Save languages"}
+          </button>
+          {!languages.allowed ? (
+            <span className="text-xs font-bold text-amber-700">Not set yet. Save to fix this park's languages.</span>
+          ) : null}
+        </div>
+      </section>
+      <aside className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm">
+        <p className="text-xs font-black uppercase text-violet-700">How it works</p>
+        <ul className="mt-3 space-y-2 text-sm font-semibold text-stone-700">
+          <li>Movira sets the park's languages here (also on the park's Edit page).</li>
+          <li>The park translates its products, waivers and emails in the admin app.</li>
+          <li>Removing the additional language turns it off for guests.</li>
+        </ul>
+      </aside>
+    </div>
   );
 }
 
@@ -2870,6 +3031,7 @@ function OverviewPanel({ park }) {
               ["Customer email", park.ownerUser?.email || park.ownerEmail || "-"],
               ["Region", park.location || "-"],
               ["Currency", park.currency || "-"],
+              ["Languages", parkLanguagesSummary(park)],
               ["Payment", park.paymentStatus || "not_configured"],
             ].map(([label, value]) => (
               <div key={label} className="rounded-lg border border-stone-200 bg-stone-50 p-3">

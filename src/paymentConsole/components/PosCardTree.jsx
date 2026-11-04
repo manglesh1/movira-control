@@ -84,9 +84,10 @@ function ParkReaderInventory({ locationId, onConfigurePos }) {
     finally { if (version === generation.current) setLoading(false); }
   }, [locationId]);
   useEffect(() => {
+    const currentGeneration = generation;
     setTree(null); setEditing(null); setDraft(emptyDraft);
     load();
-    return () => { generation.current++; };
+    return () => { currentGeneration.current++; };
   }, [load]);
   async function run(action) {
     if (busyRef.current) return false;

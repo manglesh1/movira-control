@@ -66,7 +66,7 @@ function LegacyPaymentVenueRedirect() {
 
 export default function AppRoutes() {
   return (
-    <Router>
+    <Router basename={import.meta.env.BASE_URL.replace(/\/$/, "") || "/"}>
       <Suspense fallback={<Loader />}>
         <Routes>
           <Route path="/login" element={<Login />} />

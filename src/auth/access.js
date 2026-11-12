@@ -6,6 +6,7 @@ export const ACCESS_POLICIES = Object.freeze({
   venues: ["saas.control.access"],
   gateways: ["saas.control.access"],
   support: ["saas.control.access"],
+  transfers: [], // Restricted to platform super administrators.
   settings: ["saas.control.access"],
 });
 

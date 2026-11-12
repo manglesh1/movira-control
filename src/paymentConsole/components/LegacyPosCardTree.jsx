@@ -13,6 +13,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { appConfirm } from "../../services/appDialog";
 import {
   FiCpu,
+  FiEdit2,
   FiPlus,
   FiStar,
   FiTrash2,
@@ -58,8 +59,10 @@ export default function LegacyPosCardTree({ locationId }) {
     try {
       await fn();
       await load();
+      return true;
     } catch (err) {
       setError(err?.message || "Action failed.");
+      return false;
     } finally {
       setBusy(false);
     }
@@ -184,6 +187,7 @@ function AddTerminal({ locationId, busy, onDone, setError }) {
 
 function TerminalRow({ locationId, terminal, enrollment, busy, run }) {
   const readers = terminal.readers || [];
+  const [editingReader, setEditingReader] = useState(null);
   return (
     <div className="rounded-xl border border-[var(--stroke-soft)] p-3">
       <div className="flex items-center gap-2">
@@ -235,6 +239,9 @@ function TerminalRow({ locationId, terminal, enrollment, busy, run }) {
               ) : null}
               <Badge tone={r.status === "online" ? "green" : "neutral"}>{r.status}</Badge>
               <div className="ml-auto flex items-center gap-1">
+                <Button type="button" variant="outline" size="sm" title="Edit reader"
+                  aria-label={`Edit ${r.displayName}`} disabled={busy || r.busy}
+                  onClick={() => setEditingReader(r)}><FiEdit2 /> Edit</Button>
                 {!r.isDefault && (
                   <Button
                     variant="ghost"
@@ -263,6 +270,8 @@ function TerminalRow({ locationId, terminal, enrollment, busy, run }) {
             </div>
           ))
         )}
+        {editingReader && <EditReader key={editingReader.terminalId} reader={editingReader} locationId={locationId}
+          isNuvei={enrollment === "tid-per-till"} busy={busy} run={run} onClose={() => setEditingReader(null)} />}
         <AddReader locationId={locationId} terminal={terminal} enrollment={enrollment} busy={busy} run={run} />
       </div>
     </div>
@@ -390,4 +399,41 @@ function AddReader({ locationId, terminal, enrollment, busy, run }) {
       </div>
     </div>
   );
+}
+
+function EditReader({ reader, locationId, isNuvei, busy, run, onClose }) {
+  const [draft, setDraft] = useState({ displayName: reader.displayName || "", model: reader.model || "",
+    serialNumber: reader.serialNumber || "", providerTerminalId: reader.providerTerminalId || "",
+    registerId: reader.registerId || "", registerAuthKey: "" });
+  const set = (field, value) => setDraft(current => ({ ...current, [field]: value }));
+  const keyValid = !draft.registerAuthKey.trim() || UUID_RE.test(draft.registerAuthKey.trim());
+  const valid = draft.displayName.trim() && (!isNuvei || (draft.providerTerminalId.trim() && draft.registerId.trim() && keyValid));
+  async function save(event) {
+    event.preventDefault();
+    if (!valid || busy) return;
+    const body = { locationId, displayName: draft.displayName.trim(), model: draft.model.trim(), serialNumber: draft.serialNumber.trim() };
+    if (isNuvei) {
+      body.providerTerminalId = draft.providerTerminalId.trim();
+      body.registerId = draft.registerId.trim();
+      if (draft.registerAuthKey.trim()) body.registerAuthKey = draft.registerAuthKey.trim();
+    }
+    if (await run(() => api.updateReader(reader.terminalId, body))) onClose();
+  }
+  return <form onSubmit={save} aria-label={`Edit reader ${reader.displayName}`} className="mt-3 rounded-xl border border-[var(--stroke-soft)] bg-[var(--surface-muted)] p-3 space-y-3">
+    <h4 className="font-semibold">Edit reader</h4>
+    <fieldset disabled={busy} className="grid gap-3 sm:grid-cols-2">
+      <label>Reader name<Input required maxLength={120} value={draft.displayName} onChange={event => set("displayName", event.target.value)} /></label>
+      <label>Model<Input maxLength={120} value={draft.model} onChange={event => set("model", event.target.value)} /></label>
+      <label>Serial number<Input maxLength={120} value={draft.serialNumber} onChange={event => set("serialNumber", event.target.value)} /></label>
+      {isNuvei && <>
+        <label>Terminal ID (TID)<Input required maxLength={120} value={draft.providerTerminalId} onChange={event => set("providerTerminalId", event.target.value)} /></label>
+        <label>Register ID<Input required maxLength={120} value={draft.registerId} onChange={event => set("registerId", event.target.value)} /></label>
+        <label>New Register Auth Key (optional)<Input type="password" autoComplete="new-password" value={draft.registerAuthKey} onChange={event => set("registerAuthKey", event.target.value)} aria-invalid={!keyValid} /></label>
+      </>}
+    </fieldset>
+    {isNuvei && <p className="text-xs text-[var(--text-muted)]">Leave the auth key blank to keep the saved key. Enter a complete UUID only when replacing it.</p>}
+    {!keyValid && <p role="alert" className="text-xs text-[var(--err)]">Register Auth Key must be a complete UUID.</p>}
+    <div className="flex gap-2"><Button type="submit" size="sm" disabled={busy || !valid}>{busy ? "Saving..." : "Save reader"}</Button>
+      <Button type="button" size="sm" variant="ghost" disabled={busy} onClick={onClose}>Cancel</Button></div>
+  </form>;
 }

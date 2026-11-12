@@ -31,3 +31,8 @@ test("home route resolves to the first authorized workspace", () => {
   );
   assert.equal(firstAccessiblePath({ token: "jwt", user: { role_id: 4 } }), null);
 });
+
+test("location transfers require platform super-administrator access", () => {
+ assert.equal(canAccessPolicy({token:"jwt",user:{role_id:4},actionPermissions:["saas.control.access"]},"transfers"),false);
+ assert.equal(canAccessPolicy({token:"jwt",user:{role_id:1}},"transfers"),true);
+});

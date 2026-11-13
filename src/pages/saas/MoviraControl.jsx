@@ -1,4 +1,5 @@
 import { createElement, useEffect, useMemo, useRef, useState } from "react";
+import CustomerAuthSettings from "./CustomerAuthSettings";
 import { createPortal } from "react-dom";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -2839,6 +2840,7 @@ export function ParkDetail() {
       actions={
         <div className="flex w-full flex-wrap gap-2 sm:w-auto">
           <Link to="/movira-control/parks" className={buttonClass("secondary", "flex-1 sm:flex-none")}><FaArrowLeft /> Locations</Link>
+          <Link to={parkSectionHref(park.locationId, "authentication")} className={buttonClass(section === "authentication" ? "primary" : "secondary", "flex-1 sm:flex-none")}><FaLock /> Authentication</Link>
           <Link
             to={parkSectionHref(park.locationId, "languages")}
             className={buttonClass(section === "languages" ? "primary" : "secondary", "flex-1 sm:flex-none")}
@@ -2881,6 +2883,7 @@ export function ParkDetail() {
       {section === "onboarding" ? <OnboardingPanel park={park} /> : null}
       {section === "audit" ? <AuditPanel park={park} initialLogs={auditLogs} /> : null}
       {section === "languages" ? <LanguagesPanel park={park} /> : null}
+      {section === "authentication" ? <CustomerAuthSettings locationId={park.locationId} /> : null}
       {!section ? <OverviewPanel park={park} /> : null}
     </ControlShell>
   );

@@ -2,6 +2,7 @@ import { createElement, useEffect, useState } from "react";
 import { FiExternalLink, FiImage, FiMail, FiSave, FiSettings } from "react-icons/fi";
 import { toast } from "sonner";
 import PageLayout from "../../layouts/PageLayout";
+import CustomerAuthSettings from "./CustomerAuthSettings";
 import Loader from "../../components/Loader";
 import ErrorMessage from "../../components/ErrorMessage";
 import {
@@ -123,6 +124,7 @@ export default function ControlSettings() {
           </button>
         </div>
       </form>
+      <CustomerAuthSettings />
     </PageLayout>
   );
 }

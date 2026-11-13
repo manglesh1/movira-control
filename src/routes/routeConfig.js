@@ -6,6 +6,7 @@ export const PARK_SECTIONS = Object.freeze([
   "billing-history",
   "onboarding",
   "audit",
+  "authentication",
 ]);
 
 export function isValidParkSection(section) {

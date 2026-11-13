@@ -6,6 +6,18 @@ const locationHeaders = (locationId) =>
 
 export const moviraControlApi = baseApi.injectEndpoints({
   endpoints: (builder) => ({
+    getCustomerAuth: builder.query({
+      query: (locationId) => locationId ? `/saas/parks/${locationId}/customer-auth` : "/saas/customer-auth",
+      providesTags: [{ type: "SaasControl", id: "customer-auth" }],
+      transformResponse: response => response.data,
+    }),
+    saveCustomerAuth: builder.mutation({
+      query: ({ locationId, provider, ...body }) => ({
+        url: locationId ? `/saas/parks/${locationId}/customer-auth/${provider}` : `/saas/customer-auth/${provider}`,
+        method: "PUT", body,
+      }),
+      invalidatesTags: [{ type: "SaasControl", id: "customer-auth" }],
+    }),
     getSaasPlatformSettings: builder.query({
       query: () => "/saas/settings",
       providesTags: [{ type: "SaasControl", id: "platform-settings" }],
@@ -444,6 +456,8 @@ export const moviraControlApi = baseApi.injectEndpoints({
 });
 
 export const {
+  useGetCustomerAuthQuery,
+  useSaveCustomerAuthMutation,
   useGetSaasPlatformSettingsQuery,
   useUpdateSaasPlatformSettingsMutation,
   useGetSaasParksQuery,

@@ -495,3 +495,37 @@ export const {
   useUpdateSaasParkLifecycleMutation,
   useApproveSaasParkGoLiveMutation,
 } = moviraControlApi;
+
+export const controlEmailApi = baseApi.injectEndpoints({
+  endpoints: (builder) => ({
+    getControlEmailCatalog: builder.query({
+      query: () => "/saas/email/templates",
+      providesTags: [{ type: "SaasControl", id: "email-catalog" }],
+    }),
+    getControlEmailTemplate: builder.query({
+      query: (id) => `/saas/email/templates/${id}`,
+      providesTags: (_result, _error, id) => [{ type: "SaasControl", id }],
+    }),
+    publishControlEmailTemplate: builder.mutation({
+      query: ({ id, ...body }) => ({ url: `/saas/email/templates/${id}`, method: "PUT", body }),
+      invalidatesTags: (_result, error, { id }) => error ? [] : [{ type: "SaasControl", id }, { type: "SaasControl", id: "email-catalog" }],
+    }),
+    previewControlEmailTemplate: builder.mutation({
+      query: ({ id, ...body }) => ({ url: `/saas/email/templates/${id}/preview`, method: "POST", body }),
+    }),
+    restoreControlEmailTemplate: builder.mutation({
+      query: ({ id, ...body }) => ({ url: `/saas/email/templates/${id}/restore`, method: "POST", body }),
+      invalidatesTags: (_result, error, { id }) => error ? [] : [{ type: "SaasControl", id }, { type: "SaasControl", id: "email-catalog" }],
+    }),
+    getControlEmailOperations: builder.query({ query: () => "/saas/email/operations" }),
+  }),
+});
+
+export const {
+  useGetControlEmailCatalogQuery,
+  useGetControlEmailTemplateQuery,
+  usePublishControlEmailTemplateMutation,
+  usePreviewControlEmailTemplateMutation,
+  useRestoreControlEmailTemplateMutation,
+  useGetControlEmailOperationsQuery,
+} = controlEmailApi;

@@ -1,10 +1,10 @@
 import { createElement } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
-import { FiCreditCard, FiDollarSign, FiGrid, FiLayers, FiLogOut, FiSettings, FiSliders, FiLifeBuoy, FiDatabase } from "react-icons/fi";
+import { FiCreditCard, FiDollarSign, FiGrid, FiLayers, FiLogOut, FiSettings, FiSliders, FiLifeBuoy, FiDatabase, FiMail } from "react-icons/fi";
 import { logout } from "../features/auth/authSlice";
 import { useLogoutMutation } from "../features/auth/authApi";
-import { canAccessPolicy } from "../auth/access";
+import { canAccessPolicy, isSuperAdmin } from "../auth/access";
 import ThemeToggle from "../components/ThemeToggle";
 
 const navItems = [
@@ -15,6 +15,7 @@ const navItems = [
   { to: "/movira-control/payments/gateways", label: "Gateways", icon: FiSettings, policy: "gateways" },
   { to: "/movira-control/support", label: "Support", icon: FiLifeBuoy, policy: "support" },
   { to: "/movira-control/transfers", label: "Transfers", icon: FiDatabase, policy: "transfers" },
+  { to: "/movira-control/email", label: "Email", icon: FiMail, policy: "settings", superAdminOnly: true },
   { to: "/movira-control/settings", label: "Settings", icon: FiSliders, policy: "settings" },
 ];
 
@@ -37,7 +38,7 @@ export default function ControlAdminLayout() {
   const auth = useSelector((state) => state.auth);
   const user = auth.user;
   const [endSession] = useLogoutMutation();
-  const visibleNavItems = navItems.filter((item) => canAccessPolicy(auth, item.policy));
+  const visibleNavItems = navItems.filter((item) => canAccessPolicy(auth, item.policy) && (!item.superAdminOnly || isSuperAdmin(user)));
 
   async function handleLogout() {
     try {

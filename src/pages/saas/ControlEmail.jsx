@@ -21,7 +21,11 @@ const panel = "rounded-xl border border-slate-200 bg-[var(--surface-panel)] p-4"
 const field = "w-full rounded-lg border border-slate-300 bg-transparent px-3 py-2";
 const primary = "rounded-lg bg-[#7220e6] px-3 py-2 text-sm font-semibold text-white disabled:opacity-50";
 const secondary = "rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold disabled:opacity-50";
-const errorMessage = (error) => error?.data?.message || error?.data?.error || "Request failed.";
+const errorMessage = (error) => {
+  const message = error?.data?.message || error?.data?.error;
+  if (typeof message === "string" && /<!doctype|<html/i.test(message)) return "The gateway blocked this request. Your session is still active. Saved-template previews remain available; draft HTML requests may need a gateway configuration review.";
+  return message || "Request failed.";
+};
 const displayDate = (value) => value ? new Date(value).toLocaleString() : "—";
 
 export default function ControlEmail() {
@@ -104,7 +108,11 @@ function MasterEditor({ row, template, refreshing }) {
 
   async function showPreview() {
     try {
-      const response = await render({ ...payload(), eventType }).unwrap();
+      const unchanged = subject === (template.subject || "")
+        && plainText === (template.plainText || "")
+        && content === (template.editorType === "design" ? JSON.stringify(template.designJson, null, 2) : template.body);
+      // Render the saved master on the server instead of retransmitting its HTML.
+      const response = await render(unchanged ? { id: row.id, eventType } : { ...payload(), eventType }).unwrap();
       setPreview(response.data);
     } catch (error) {
       toast.error(error instanceof SyntaxError ? "The template JSON is invalid." : errorMessage(error));

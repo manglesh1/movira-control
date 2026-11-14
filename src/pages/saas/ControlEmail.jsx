@@ -13,9 +13,9 @@ import {
 } from "../../features/saas/moviraControlApi";
 
 const staffFlows = [
-  { event: "employee.portal.created", label: "Staff welcome", description: "Sent after employee portal credentials are created." },
-  { event: "employee.credentials.regenerated", label: "Regenerated password", description: "Sent after a manager issues a new temporary password." },
-  { event: "employee.password_reset.otp_requested", label: "Forgot password", description: "Sends the verification code requested from the employee portal." },
+  { event: "employee.portal.created", key: "employeeWelcome", label: "Staff welcome", description: "Sent after employee portal credentials are created." },
+  { event: "employee.credentials.regenerated", key: "employeePasswordRegenerated", label: "Regenerated password", description: "Sent after a manager issues a new temporary password." },
+  { event: "employee.password_reset.otp_requested", key: "employeePasswordRecoveryOtp", label: "Forgot password", description: "Sends the verification code requested from the employee portal." },
 ];
 const panel = "rounded-xl border border-slate-200 bg-[var(--surface-panel)] p-4";
 const field = "w-full rounded-lg border border-slate-300 bg-transparent px-3 py-2";
@@ -30,7 +30,7 @@ const displayDate = (value) => value ? new Date(value).toLocaleString() : "—";
 
 export default function ControlEmail() {
   const user = useSelector((state) => state.auth.user);
-  const [tab, setTab] = useState("staff");
+  const [tab, setTab] = useState("catalog");
   if (!isSuperAdmin(user)) return <AccessDenied />;
   return (
     <main className="mx-auto max-w-7xl space-y-4 p-4 sm:p-6">
@@ -39,41 +39,52 @@ export default function ControlEmail() {
         <p className="mt-1 text-sm">Manage Movira defaults and monitor transactional delivery.</p>
       </header>
       <nav aria-label="Email sections" className="flex flex-wrap gap-2">
-        <button type="button" className={tab === "staff" ? primary : secondary} onClick={() => setTab("staff")}>Staff access emails</button>
         <button type="button" className={tab === "catalog" ? primary : secondary} onClick={() => setTab("catalog")}>Template catalog</button>
         <button type="button" className={tab === "operations" ? primary : secondary} onClick={() => setTab("operations")}>Email operations</button>
       </nav>
-      {tab === "operations" ? <Operations /> : <Catalog key={tab} staffOnly={tab === "staff"} />}
+      {tab === "operations" ? <Operations /> : <Catalog />}
     </main>
   );
 }
 
-function Catalog({ staffOnly = false }) {
+const staffFlowFor = (row) => staffFlows.find(flow => flow.key === row.key || row.events.some(event => event.type === flow.event));
+const categoryFor = (row) => staffFlowFor(row) ? "Staff" : (row.family || "Other").replace(/[_-]/g, " ").replace(/\b\w/g, letter => letter.toUpperCase());
+
+function Catalog() {
   const { data, error, isLoading } = useGetControlEmailCatalogQuery();
   const [search, setSearch] = useState("");
+  const [category, setCategory] = useState("All categories");
   const [selectedId, setSelectedId] = useState("");
   const rows = data?.data || [];
   const selected = rows.find((row) => row.id === selectedId);
-  const visible = rows.filter(row => !staffOnly || row.events.some(event => staffFlows.some(flow => flow.event === event.type))).filter((row) => [row.name, row.locale, ...row.events.map((event) => event.type)]
-    .some((value) => value?.toLowerCase().includes(search.trim().toLowerCase())));
+  const categories = ["Staff", ...[...new Set(rows.map(categoryFor))].filter(value => value !== "Staff").sort()];
+  const visible = rows.filter(row => category === "All categories" || categoryFor(row) === category)
+    .filter(row => [row.name, row.key, row.locale, categoryFor(row), staffFlowFor(row)?.label, ...row.events.map(event => event.type)]
+      .some(value => value?.toLowerCase().includes(search.trim().toLowerCase())));
   return (
     <div className="grid items-start gap-4 lg:grid-cols-[minmax(280px,1fr)_minmax(0,2fr)]">
       <section className={panel}>
-        {staffOnly && <div className="mb-4 space-y-2"><h2 className="font-bold">Staff access emails</h2><p className="text-sm">Manage the wording and design here. Passwords, verification codes, expiry and session security remain controlled by the backend.</p></div>}
-        <input className={field} aria-label="Search master templates" placeholder="Search name, event or language" value={search} onChange={(event) => setSearch(event.target.value)} />
+        <h2 className="mb-3 font-bold">Template catalog</h2>
+        <label className="mb-3 grid gap-1 text-sm font-semibold">Category
+          <select className={field} value={category} onChange={event => setCategory(event.target.value)}>
+            <option>All categories</option>{categories.map(value => <option key={value}>{value}</option>)}
+          </select>
+        </label>
+        <input className={field} aria-label="Search master templates" placeholder="Search name, event or language" value={search} onChange={event => setSearch(event.target.value)} />
+        {category === "Staff" && <p className="mt-3 text-sm">Welcome, regenerated-password and forgot-password emails. Select a template to view its CRM binding and preview it. Passwords and verification codes remain controlled by the backend.</p>}
         {isLoading && <p className="mt-3" role="status">Loading templates…</p>}
         {error && <p className="mt-3" role="alert">{errorMessage(error)}</p>}
-        {staffOnly && !isLoading && !error && <div className="mt-3 grid gap-2">{staffFlows.filter(flow => !search.trim() || `${flow.label} ${flow.event} ${flow.description}`.toLowerCase().includes(search.trim().toLowerCase()) || visible.some(row => row.events.some(event => event.type === flow.event))).map(flow => {
-          const matches = rows.filter(row => row.events.some(event => event.type === flow.event));
-          return <div className="rounded-lg border border-slate-200 p-3 text-sm" key={flow.event}><strong>{flow.label}</strong><p className="mt-1">{flow.description}</p><p className={matches.length ? "mt-1 text-green-700" : "mt-1 text-amber-700"}>{matches.length ? `Active binding · ${matches.length} template language(s)` : "Missing active binding - CRM configuration needs attention"}</p><code className="mt-1 block break-all text-xs">{flow.event}</code>{matches.map(row => <button type="button" key={row.id} className={`${secondary} mt-2 mr-2`} aria-pressed={selectedId === row.id} onClick={() => setSelectedId(row.id)}>Manage {flow.label.toLowerCase()} · {row.locale}</button>)}</div>;
-        })}</div>}
+        {!isLoading && !error && visible.length === 0 && <p className="mt-3 text-sm">No templates match these filters.</p>}
         <div className="mt-3 grid max-h-[65vh] gap-2 overflow-auto">
-          {!staffOnly && visible.map((row) => (
-            <button type="button" aria-pressed={selectedId === row.id} className={`${secondary} grid gap-1 text-left ${selectedId === row.id ? "border-violet-500" : ""}`} key={row.id} onClick={() => setSelectedId(row.id)}>
-              <span>{row.name} · {row.locale}</span>
-              <span className="text-xs font-normal">{row.scope === "movira_control" ? "Movira Control" : "Park default"} · {row.events.length} active events{row.scope === "location" ? ` · ${row.customizedLocations} customized` : ""}</span>
-            </button>
-          ))}
+          {visible.map(row => {
+            const flow = staffFlowFor(row);
+            return <button type="button" aria-pressed={selectedId === row.id} className={`${secondary} grid gap-1 text-left ${selectedId === row.id ? "border-violet-500 bg-violet-50" : ""}`} key={row.id} onClick={() => setSelectedId(row.id)}>
+              <span>{flow?.label || row.name} · {row.locale}</span>
+              <span className="text-xs font-normal">{categoryFor(row)} · {row.scope === "movira_control" ? "Movira Control" : "Park default"}</span>
+              {flow && <span className="text-xs font-normal">{flow.description}</span>}
+              <span className={`text-xs font-normal ${row.events.length ? "text-green-700" : "text-amber-700"}`}>{row.events.length ? `${row.events.length} active event binding(s)` : "No active event binding"}{row.scope === "location" ? ` · ${row.customizedLocations} customized` : ""}</span>
+            </button>;
+          })}
         </div>
       </section>
       {selected ? <MasterTemplate key={selected.id} row={selected} /> : <p className={panel}>Select an email to review its binding, edit its content and preview with sample data. No email is sent by previewing.</p>}

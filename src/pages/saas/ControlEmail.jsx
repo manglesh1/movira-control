@@ -12,6 +12,11 @@ import {
   useRestoreControlEmailTemplateMutation,
 } from "../../features/saas/moviraControlApi";
 
+const staffFlows = [
+  { event: "employee.portal.created", label: "Staff welcome", description: "Sent after employee portal credentials are created." },
+  { event: "employee.credentials.regenerated", label: "Regenerated password", description: "Sent after a manager issues a new temporary password." },
+  { event: "employee.password_reset.otp_requested", label: "Forgot password", description: "Sends the verification code requested from the employee portal." },
+];
 const panel = "rounded-xl border border-slate-200 bg-[var(--surface-panel)] p-4";
 const field = "w-full rounded-lg border border-slate-300 bg-transparent px-3 py-2";
 const primary = "rounded-lg bg-[#7220e6] px-3 py-2 text-sm font-semibold text-white disabled:opacity-50";
@@ -21,7 +26,7 @@ const displayDate = (value) => value ? new Date(value).toLocaleString() : "—";
 
 export default function ControlEmail() {
   const user = useSelector((state) => state.auth.user);
-  const [tab, setTab] = useState("catalog");
+  const [tab, setTab] = useState("staff");
   if (!isSuperAdmin(user)) return <AccessDenied />;
   return (
     <main className="mx-auto max-w-7xl space-y-4 p-4 sm:p-6">
@@ -29,31 +34,37 @@ export default function ControlEmail() {
         <h1 className="text-2xl font-bold">Email</h1>
         <p className="mt-1 text-sm">Manage Movira defaults and monitor transactional delivery.</p>
       </header>
-      <nav aria-label="Email sections" className="flex gap-2">
+      <nav aria-label="Email sections" className="flex flex-wrap gap-2">
+        <button type="button" className={tab === "staff" ? primary : secondary} onClick={() => setTab("staff")}>Staff access emails</button>
         <button type="button" className={tab === "catalog" ? primary : secondary} onClick={() => setTab("catalog")}>Template catalog</button>
         <button type="button" className={tab === "operations" ? primary : secondary} onClick={() => setTab("operations")}>Email operations</button>
       </nav>
-      {tab === "catalog" ? <Catalog /> : <Operations />}
+      {tab === "operations" ? <Operations /> : <Catalog key={tab} staffOnly={tab === "staff"} />}
     </main>
   );
 }
 
-function Catalog() {
+function Catalog({ staffOnly = false }) {
   const { data, error, isLoading } = useGetControlEmailCatalogQuery();
   const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState("");
   const rows = data?.data || [];
   const selected = rows.find((row) => row.id === selectedId);
-  const visible = rows.filter((row) => [row.name, row.locale, ...row.events.map((event) => event.type)]
+  const visible = rows.filter(row => !staffOnly || row.events.some(event => staffFlows.some(flow => flow.event === event.type))).filter((row) => [row.name, row.locale, ...row.events.map((event) => event.type)]
     .some((value) => value?.toLowerCase().includes(search.trim().toLowerCase())));
   return (
     <div className="grid items-start gap-4 lg:grid-cols-[minmax(280px,1fr)_minmax(0,2fr)]">
       <section className={panel}>
+        {staffOnly && <div className="mb-4 space-y-2"><h2 className="font-bold">Staff access emails</h2><p className="text-sm">Manage the wording and design here. Passwords, verification codes, expiry and session security remain controlled by the backend.</p></div>}
         <input className={field} aria-label="Search master templates" placeholder="Search name, event or language" value={search} onChange={(event) => setSearch(event.target.value)} />
         {isLoading && <p className="mt-3" role="status">Loading templates…</p>}
         {error && <p className="mt-3" role="alert">{errorMessage(error)}</p>}
+        {staffOnly && !isLoading && !error && <div className="mt-3 grid gap-2">{staffFlows.filter(flow => !search.trim() || `${flow.label} ${flow.event} ${flow.description}`.toLowerCase().includes(search.trim().toLowerCase()) || visible.some(row => row.events.some(event => event.type === flow.event))).map(flow => {
+          const matches = rows.filter(row => row.events.some(event => event.type === flow.event));
+          return <div className="rounded-lg border border-slate-200 p-3 text-sm" key={flow.event}><strong>{flow.label}</strong><p className="mt-1">{flow.description}</p><p className={matches.length ? "mt-1 text-green-700" : "mt-1 text-amber-700"}>{matches.length ? `Active binding · ${matches.length} template language(s)` : "Missing active binding - CRM configuration needs attention"}</p><code className="mt-1 block break-all text-xs">{flow.event}</code>{matches.map(row => <button type="button" key={row.id} className={`${secondary} mt-2 mr-2`} aria-pressed={selectedId === row.id} onClick={() => setSelectedId(row.id)}>Manage {flow.label.toLowerCase()} · {row.locale}</button>)}</div>;
+        })}</div>}
         <div className="mt-3 grid max-h-[65vh] gap-2 overflow-auto">
-          {visible.map((row) => (
+          {!staffOnly && visible.map((row) => (
             <button type="button" aria-pressed={selectedId === row.id} className={`${secondary} grid gap-1 text-left ${selectedId === row.id ? "border-violet-500" : ""}`} key={row.id} onClick={() => setSelectedId(row.id)}>
               <span>{row.name} · {row.locale}</span>
               <span className="text-xs font-normal">{row.scope === "movira_control" ? "Movira Control" : "Park default"} · {row.events.length} active events{row.scope === "location" ? ` · ${row.customizedLocations} customized` : ""}</span>
@@ -61,7 +72,7 @@ function Catalog() {
           ))}
         </div>
       </section>
-      {selected ? <MasterTemplate key={selected.id} row={selected} /> : <p className={panel}>Select a template to view its events and edit the master.</p>}
+      {selected ? <MasterTemplate key={selected.id} row={selected} /> : <p className={panel}>Select an email to review its binding, edit its content and preview with sample data. No email is sent by previewing.</p>}
     </div>
   );
 }
@@ -125,19 +136,22 @@ function MasterEditor({ row, template, refreshing }) {
     <section className={`${panel} space-y-4`}>
       <div>
         <h2 className="text-lg font-bold">{row.name} · {row.locale}</h2>
-        <p className="text-sm">Active events: {row.events.map((event) => event.type).join(", ") || "None"}</p>
+        <p className="mt-1 text-sm">Master template · {row.key} · {row.customizedLocations || 0} location customizations</p>
+        <p className="mt-1 text-sm">Publishing updates locations using this default. Location-specific overrides keep their own content.</p>
+        <div className="mt-3 space-y-2" aria-label="Event bindings">{row.events.map(event => <div key={event.type} className="rounded-lg border border-slate-200 p-3 text-sm"><strong>{staffFlows.find(flow => flow.event === event.type)?.label || event.description || event.type}</strong><p className="text-green-700">Active CRM binding</p><code className="block break-all text-xs">{event.type} → {event.templateKey || row.key}</code><p className="mt-1">{event.description}</p>{event.requiredVariables?.length > 0 && <p className="mt-2">Backend variables: {event.requiredVariables.map(variable => <code key={variable} className="mr-2 inline-block">{`{{${variable}}}`}</code>)}</p>}</div>)}</div>
       </div>
       <form className="grid gap-3" onSubmit={publishMaster}>
-        <label className="grid gap-1 text-sm font-semibold">Subject<input className={field} required maxLength={500} value={subject} onChange={(event) => setSubject(event.target.value)} /></label>
-        <label className="grid gap-1 text-sm font-semibold">{template.editorType === "design" ? "Design JSON" : "Email HTML"}<textarea className={`${field} font-mono`} required rows={12} value={content} onChange={(event) => setContent(event.target.value)} /></label>
-        <label className="grid gap-1 text-sm font-semibold">Plain text fallback<textarea className={field} rows={3} value={plainText} onChange={(event) => setPlainText(event.target.value)} /></label>
+        <label className="grid gap-1 text-sm font-semibold">Subject<input className={field} required maxLength={500} value={subject} onChange={(event) => { setSubject(event.target.value); setPreview(null); }} /></label>
+        <label className="grid gap-1 text-sm font-semibold">{template.editorType === "design" ? "Design JSON" : "Email HTML"}<textarea className={`${field} font-mono`} required rows={12} value={content} onChange={(event) => { setContent(event.target.value); setPreview(null); }} /></label>
+        <label className="grid gap-1 text-sm font-semibold">Plain text fallback<textarea className={field} rows={3} value={plainText} onChange={(event) => { setPlainText(event.target.value); setPreview(null); }} /></label>
         <div className="flex flex-wrap items-center gap-2">
-          {row.events.length > 1 && <select aria-label="Preview event" className={secondary} value={eventType} onChange={(event) => setEventType(event.target.value)}>{row.events.map((event) => <option key={event.type}>{event.type}</option>)}</select>}
-          <button type="button" className={secondary} disabled={rendering.isLoading} onClick={showPreview}>Preview</button>
+          {row.events.length > 1 && <select aria-label="Preview event" className={secondary} value={eventType} onChange={(event) => { setEventType(event.target.value); setPreview(null); }}>{row.events.map((event) => <option key={event.type}>{event.type}</option>)}</select>}
+          <button type="button" className={secondary} disabled={rendering.isLoading} onClick={showPreview}>Preview with sample data</button>
           <button type="submit" className={primary} disabled={refreshing || publishing.isLoading}>Publish master</button>
         </div>
       </form>
-      {preview && <div><p className="mb-2 font-semibold">{preview.subject}</p><iframe title="Email preview" className="h-96 w-full rounded-lg border border-slate-200 bg-white" sandbox="" srcDoc={preview.html} /></div>}
+      <p className="text-xs">Preview uses fictional credentials and codes, and never queues an email. Portal URLs in previews are samples; actual links come from the backend environment.</p>
+      {preview && <div><p className="mb-2 font-semibold">{preview.subject}</p><iframe title="Email preview" className="h-96 w-full rounded-lg border border-slate-200 bg-white" sandbox="" srcDoc={preview.html} /><details className="mt-2"><summary className="cursor-pointer text-sm font-semibold">Plain text preview</summary><pre className="mt-2 whitespace-pre-wrap break-words text-sm">{preview.text || "No plain text content"}</pre></details></div>}
       <details>
         <summary className="cursor-pointer font-semibold">Published revision history</summary>
         {template.history.length === 0 && <p className="mt-2 text-sm">No revisions recorded yet.</p>}

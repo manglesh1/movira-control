@@ -1,0 +1,31 @@
+name: Diagnose Control email gateway
+on:
+  workflow_dispatch: {}
+permissions:
+  contents: read
+  id-token: write
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::072508717210:role/movira-github-actions-deploy
+          aws-region: us-east-1
+      - name: Inspect distribution and Web ACL rules
+        shell: bash
+        run: |
+          aws cloudfront get-distribution-config --id E5RHB3IK3X8KZ > /tmp/distribution.json
+          python3 - <<'PY'
+          import json
+          d=json.load(open('/tmp/distribution.json'))['DistributionConfig']
+          print(json.dumps({'WebACLId':d.get('WebACLId'),'behaviors':[{'path':x.get('PathPattern'),'methods':x.get('AllowedMethods'),'origin':x.get('TargetOriginId')} for x in d.get('CacheBehaviors',{}).get('Items',[])]}))
+          arn=d.get('WebACLId','')
+          open('/tmp/waf-arn','w').write(arn)
+          PY
+          ARN=$(cat /tmp/waf-arn)
+          if [ -n "$ARN" ]; then
+            ID=${ARN##*/}
+            NAME=$(echo "$ARN" | awk -F/ '{print $(NF-1)}')
+            aws wafv2 get-web-acl --scope CLOUDFRONT --region us-east-1 --id "$ID" --name "$NAME" --query 'WebACL.{Name:Name,DefaultAction:DefaultAction,Rules:Rules}'
+          fi

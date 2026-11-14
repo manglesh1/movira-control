@@ -13,8 +13,10 @@ import {
 } from "../../features/saas/moviraControlApi";
 
 const staffFlows = [
+  { event: "employee.password_reset.link_requested", key: "employeePasswordResetLink", label: "Manager password reset", description: "Sends a private reset link. The employee chooses when to change their shared password." },
+  { event: "employee.park.invited", key: "employeeParkInvitation", label: "Park invitation", description: "Employee accepts access to an additional park." },
   { event: "employee.portal.created", key: "employeeWelcome", label: "Staff welcome", description: "Sent after employee portal credentials are created." },
-  { event: "employee.credentials.regenerated", key: "employeePasswordRegenerated", label: "Regenerated password", description: "Sent after a manager issues a new temporary password." },
+  { event: "employee.credentials.regenerated", key: "employeePasswordRegenerated", label: "Regenerated password (legacy)", description: "Sent after a manager issues a new temporary password." },
   { event: "employee.password_reset.otp_requested", key: "employeePasswordRecoveryOtp", label: "Forgot password", description: "Sends the verification code requested from the employee portal." },
 ];
 const panel = "rounded-xl border border-slate-200 bg-[var(--surface-panel)] p-4";

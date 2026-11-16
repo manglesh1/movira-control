@@ -63,6 +63,7 @@ import {
   useUpdateSaasParkMutation,
   useUpdateSaasParkOnboardingMutation,
   useUpdateSaasParkLanguagesMutation,
+  useUpdateSaasParkWaiverSearchCacheMutation,
   useUpdateSaasParkPaymentsMutation,
   useUpdateSaasModuleMutation,
   useUpdateSaasPlanMutation,
@@ -2884,7 +2885,12 @@ export function ParkDetail() {
       {section === "audit" ? <AuditPanel park={park} initialLogs={auditLogs} /> : null}
       {section === "languages" ? <LanguagesPanel park={park} /> : null}
       {section === "authentication" ? <CustomerAuthSettings locationId={park.locationId} /> : null}
-      {!section ? <OverviewPanel park={park} /> : null}
+      {!section ? (
+        <>
+          <OverviewPanel park={park} />
+          <WaiverSearchCacheSettings key={`${park.locationId}:${park.waiverSearchCacheDays}`} park={park} />
+        </>
+      ) : null}
     </ControlShell>
   );
 }
@@ -2917,6 +2923,49 @@ function parkLanguagesSummary(park) {
   if (!languages) return "-";
   const offered = (languages.supportedLocales || []).map(languageName).join(" + ");
   return languages.allowed ? offered : `${offered} (any allowed)`;
+}
+
+function WaiverSearchCacheSettings({ park }) {
+  const [days, setDays] = useState(String(park.waiverSearchCacheDays ?? 30));
+  const [save, { isLoading }] = useUpdateSaasParkWaiverSearchCacheMutation();
+
+  const submit = async (event) => {
+    event.preventDefault();
+    try {
+      await save({ locationId: park.locationId, days: Number(days) }).unwrap();
+      toast.success("Waiver search settings saved.");
+    } catch (error) {
+      toast.error(error?.data?.message || "Failed to save waiver search settings.");
+    }
+  };
+
+  return (
+    <form onSubmit={submit} className="space-y-3 rounded-xl border border-stone-200 bg-white p-4">
+      <label htmlFor="waiver-search-cache-days" className="block text-sm font-bold text-stone-900">
+        Waiver search cache days
+      </label>
+      <p id="waiver-search-cache-days-help" className="text-sm text-stone-600">
+        Today's bookings are always included. Set this to 0 to cache only holders with bookings today.
+      </p>
+      <div className="flex items-center gap-3">
+        <input
+          id="waiver-search-cache-days"
+          aria-describedby="waiver-search-cache-days-help"
+          type="number"
+          min={0}
+          max={365}
+          step={1}
+          required
+          value={days}
+          onChange={(event) => setDays(event.target.value)}
+          className="w-24 rounded-lg border border-stone-300 px-3 py-2 text-sm"
+        />
+        <button type="submit" className={buttonClass("primary")} disabled={isLoading}>
+          {isLoading ? "Saving…" : "Save"}
+        </button>
+      </div>
+    </form>
+  );
 }
 
 function LanguagesPanel({ park }) {

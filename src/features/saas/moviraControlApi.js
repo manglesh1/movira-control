@@ -408,6 +408,14 @@ export const moviraControlApi = baseApi.injectEndpoints({
       }),
       invalidatesTags: (result, error, { locationId }) => ["SaasControl", { type: "SaasControl", id: locationId }, { type: "SaasControl", id: `audit-${locationId}` }],
     }),
+    updateSaasParkWaiverSearchCache: builder.mutation({
+      query: ({ locationId, days }) => ({
+        url: `/saas/parks/${locationId}/waiver-search-cache`,
+        method: "PATCH",
+        body: { days },
+      }),
+      invalidatesTags: (_result, error, { locationId }) => error ? [] : [{ type: "SaasControl", id: locationId }],
+    }),
     updateSaasParkOnboarding: builder.mutation({
       query: ({ locationId, onboarding, ticketControls }) => ({
         url: `/saas/parks/${locationId}/onboarding`,
@@ -503,6 +511,7 @@ export const {
   useLazyGetSaasInvoiceDocumentQuery,
   useUpdateSaasParkOnboardingMutation,
   useUpdateSaasParkLanguagesMutation,
+  useUpdateSaasParkWaiverSearchCacheMutation,
   useDeleteSaasParkMutation,
   useLazyGetSaasParkPermanentDeletePreviewQuery,
   usePermanentDeleteSaasParkMutation,

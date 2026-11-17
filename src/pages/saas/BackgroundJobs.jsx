@@ -291,6 +291,8 @@ function RunHistory({ region, job, onClose }) {
 export default function BackgroundJobs() {
   const [selectedRegion, setSelectedRegion] = useState("");
   const [selectedJob, setSelectedJob] = useState("");
+  const [nameFilter, setNameFilter] = useState("");
+  const [nameSort, setNameSort] = useState("ascending");
   const [notice, setNotice] = useState(null);
   const { data: regionData, isError: regionsFailed } = jobsApi.useBackgroundJobRegionsQuery();
   const regions = regionData?.data ?? [];
@@ -302,6 +304,10 @@ export default function BackgroundJobs() {
   const [run, { isLoading: requesting }] = jobsApi.useRunBackgroundJobMutation();
   const jobs = currentData?.data ?? [];
   const job = jobs.find(({ key }) => key === selectedJob);
+  const search = nameFilter.trim().toLowerCase();
+  const visibleJobs = jobs
+    .filter(({ name }) => name.toLowerCase().includes(search))
+    .sort((a, b) => historyCollator.compare(a.name, b.name) * (nameSort === "ascending" ? 1 : -1));
 
   async function update(job, manual) {
     setNotice(null);
@@ -338,9 +344,16 @@ export default function BackgroundJobs() {
       {!!jobs.length && (
         <div className="overflow-x-auto rounded-xl border border-stone-200">
           <table className="w-full text-left text-xs">
-            <thead><tr><th className="p-2">Job</th><th>Status</th><th>Frequency</th><th>Last start</th><th>Last end</th><th>Last completion</th><th>Last failure</th><th>Next run</th><th>Actions</th></tr></thead>
+            <thead><tr><th scope="col" aria-sort={nameSort} className="p-2">
+              <button type="button" className="underline" onClick={() => setNameSort(nameSort === "ascending" ? "descending" : "ascending")}>
+                Job name <span aria-hidden="true">{nameSort === "ascending" ? "↑" : "↓"}</span>
+              </button>
+              <input type="search" aria-label="Filter by job name" placeholder="Filter by job name" value={nameFilter}
+                onChange={(event) => setNameFilter(event.target.value)} className="mt-1 block w-full rounded border px-2 py-1 font-normal" />
+            </th><th>Status</th><th>Frequency</th><th>Last start</th><th>Last end</th><th>Last completion</th><th>Last failure</th><th>Next run</th><th>Actions</th></tr></thead>
             <tbody>
-              {jobs.map((job) => {
+              {!visibleJobs.length && <tr><td colSpan={9} className="p-2">No jobs match that name.</td></tr>}
+              {visibleJobs.map((job) => {
                 const information = jobInformation[job.key];
                 const status = job.running ? "running" : !job.available ? "unavailable" : !job.enabled ? "disabled" : job.queued ? "queued" : job.status || "ready";
                 return (

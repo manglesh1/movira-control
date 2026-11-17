@@ -17,6 +17,11 @@ const jobsApi = baseApi.injectEndpoints({
         url: root + "/" + region + "/" + key, method: "PATCH", body: { enabled },
       }),
     }),
+    changeBackgroundJobSchedule: builder.mutation({
+      query: ({ region, key, schedule }) => ({
+        url: root + "/" + region + "/" + key + "/schedule", method: "PATCH", body: { schedule },
+      }),
+    }),
     runBackgroundJob: builder.mutation({
       query: ({ region, key }) => ({ url: root + "/" + region + "/" + key + "/run", method: "POST" }),
     }),
@@ -189,6 +194,7 @@ const historyColumns = [
   { key: "id", label: "Run", display: (run) => "#" + run.id + (run.scope ? " · Schedule " + run.scope : "") },
   { key: "trigger", label: "Trigger", display: (run) => run.trigger === "manual" ? "Manual · " + run.requested_by : "Scheduled" },
   { key: "status", label: "Status", display: (run) => names[run.status] || run.status },
+  { key: "created_at", label: "Created", display: (run) => dateTime(run.created_at), sort: (run) => run.created_at && Date.parse(run.created_at) },
   { key: "started_at", label: "Started", display: (run) => dateTime(run.started_at), sort: (run) => run.started_at && Date.parse(run.started_at) },
   { key: "finished_at", label: "Finished", display: (run) => dateTime(run.finished_at), sort: (run) => run.finished_at && Date.parse(run.finished_at) },
   { key: "duration", label: "Duration", display: (run) => durationSeconds(run) == null ? "—" : durationLabel(run) + " s", sort: durationSeconds },
@@ -291,6 +297,7 @@ function RunHistory({ region, job, onClose }) {
 export default function BackgroundJobs() {
   const [selectedRegion, setSelectedRegion] = useState("");
   const [selectedJob, setSelectedJob] = useState("");
+  const [scheduleEditor, setScheduleEditor] = useState(null);
   const [nameFilter, setNameFilter] = useState("");
   const [nameSort, setNameSort] = useState("ascending");
   const [notice, setNotice] = useState(null);
@@ -301,6 +308,7 @@ export default function BackgroundJobs() {
     skip: !region, pollingInterval: 5000,
   });
   const [change, { isLoading: changing }] = jobsApi.useChangeBackgroundJobMutation();
+  const [changeSchedule, { isLoading: savingSchedule }] = jobsApi.useChangeBackgroundJobScheduleMutation();
   const [run, { isLoading: requesting }] = jobsApi.useRunBackgroundJobMutation();
   const jobs = currentData?.data ?? [];
   const job = jobs.find(({ key }) => key === selectedJob);
@@ -308,6 +316,18 @@ export default function BackgroundJobs() {
   const visibleJobs = jobs
     .filter(({ name }) => name.toLowerCase().includes(search))
     .sort((a, b) => historyCollator.compare(a.name, b.name) * (nameSort === "ascending" ? 1 : -1));
+
+  async function saveSchedule(key, schedule) {
+    setNotice(null);
+    try {
+      await changeSchedule({ region, key, schedule }).unwrap();
+      setScheduleEditor(null);
+      setNotice({ text: schedule === null ? "Default schedule restored." : "Schedule saved." });
+      void refetch();
+    } catch (error) {
+      setNotice({ error: true, text: error?.data?.message || "Could not save the schedule." });
+    }
+  }
 
   async function update(job, manual) {
     setNotice(null);
@@ -331,6 +351,7 @@ export default function BackgroundJobs() {
             <select className="rounded-lg border border-stone-300 bg-transparent px-3 py-2" value={region} onChange={(event) => {
               setSelectedRegion(event.target.value);
               setSelectedJob("");
+              setScheduleEditor(null);
               setNotice(null);
             }}>
               {regions.map((value) => <option key={value} value={value}>{value}</option>)}
@@ -350,9 +371,9 @@ export default function BackgroundJobs() {
               </button>
               <input type="search" aria-label="Filter by job name" placeholder="Filter by job name" value={nameFilter}
                 onChange={(event) => setNameFilter(event.target.value)} className="mt-1 block w-full rounded border px-2 py-1 font-normal" />
-            </th><th>Status</th><th>Frequency</th><th>Last start</th><th>Last end</th><th>Last completion</th><th>Last failure</th><th>Next run</th><th>Actions</th></tr></thead>
+            </th><th>Status</th><th>Frequency</th><th>Last run created</th><th>Last start</th><th>Last end</th><th>Last completion</th><th>Last failure</th><th>Next run</th><th>Actions</th></tr></thead>
             <tbody>
-              {!visibleJobs.length && <tr><td colSpan={9} className="p-2">No jobs match that name.</td></tr>}
+              {!visibleJobs.length && <tr><td colSpan={10} className="p-2">No jobs match that name.</td></tr>}
               {visibleJobs.map((job) => {
                 const information = jobInformation[job.key];
                 const status = job.running ? "running" : !job.available ? "unavailable" : !job.enabled ? "disabled" : job.queued ? "queued" : job.status || "ready";
@@ -380,6 +401,7 @@ export default function BackgroundJobs() {
                     </td>
                     <td>{names[status]}</td>
                     <td title={job.schedule}>{frequencyLabel(job.schedule)}</td>
+                    <td>{dateTime(job.created_at)}</td>
                     <td>{dateTime(job.started_at)}</td>
                     <td>{dateTime(job.finished_at)}</td>
                     <td>{dateTime(job.last_success_at)}</td>
@@ -390,7 +412,23 @@ export default function BackgroundJobs() {
                         <button type="button" className="rounded border px-1.5 py-0.5 text-xs" aria-haspopup="dialog" aria-label={"View run history for " + job.name} onClick={() => setSelectedJob(job.key)}>View history</button>
                         <button type="button" className="rounded border px-1.5 py-0.5 text-xs disabled:opacity-50" disabled={changing || requesting || !job.available} onClick={() => update(job, false)}>{job.enabled ? "Disable" : "Enable"}</button>
                         {job.manual && <button type="button" className="rounded border px-1.5 py-0.5 text-xs disabled:opacity-50" disabled={changing || requesting || !job.available || !job.enabled || job.queued} onClick={() => update(job, true)}>Run now</button>}
+                        {job.scheduleEditable && <button type="button" className="rounded border px-1.5 py-0.5 text-xs" disabled={savingSchedule} onClick={() => setScheduleEditor({ key: job.key, value: job.schedule })}>Edit schedule</button>}
                       </div>
+                      {scheduleEditor?.key === job.key && (
+                        <form className="mt-2 space-y-1" onSubmit={(event) => { event.preventDefault(); void saveSchedule(job.key, scheduleEditor.value.trim()); }}>
+                          <label className="block">Cron schedule
+                            <input className="block w-full rounded border px-2 py-1 font-mono" value={scheduleEditor.value}
+                              onChange={(event) => setScheduleEditor({ key: job.key, value: event.target.value })}
+                              required maxLength={120} disabled={savingSchedule} />
+                          </label>
+                          <p>Uses the worker’s timezone. Default: <code>{job.defaultSchedule}</code></p>
+                          <div className="flex flex-wrap gap-1">
+                            <button type="submit" className="rounded border px-1.5 py-0.5" disabled={savingSchedule}>Save</button>
+                            <button type="button" className="rounded border px-1.5 py-0.5" disabled={savingSchedule} onClick={() => void saveSchedule(job.key, null)}>Restore default</button>
+                            <button type="button" className="rounded border px-1.5 py-0.5" disabled={savingSchedule} onClick={() => setScheduleEditor(null)}>Cancel</button>
+                          </div>
+                        </form>
+                      )}
                     </td>
                   </tr>
                 );

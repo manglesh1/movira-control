@@ -1,7 +1,7 @@
 import { createElement } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
-import { FiCreditCard, FiDollarSign, FiGrid, FiLayers, FiLogOut, FiSettings, FiSliders, FiLifeBuoy, FiDatabase, FiMail } from "react-icons/fi";
+import { FiCreditCard, FiDollarSign, FiGrid, FiLayers, FiLogOut, FiSettings, FiSliders, FiLifeBuoy, FiDatabase, FiMail, FiActivity } from "react-icons/fi";
 import { logout } from "../features/auth/authSlice";
 import { useLogoutMutation } from "../features/auth/authApi";
 import { canAccessPolicy, isSuperAdmin } from "../auth/access";
@@ -16,6 +16,7 @@ const navItems = [
   { to: "/movira-control/support", label: "Support", icon: FiLifeBuoy, policy: "support" },
   { to: "/movira-control/transfers", label: "Transfers", icon: FiDatabase, policy: "transfers" },
   { to: "/movira-control/email", label: "Email", icon: FiMail, policy: "settings", superAdminOnly: true },
+  { to: "/movira-control/background-jobs", label: "Background Jobs", icon: FiActivity, policy: "backgroundJobs" },
   { to: "/movira-control/settings", label: "Settings", icon: FiSliders, policy: "settings" },
 ];
 

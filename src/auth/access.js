@@ -25,6 +25,7 @@ export function isSuperAdmin(user) {
 export function canAccessPolicy(auth, policyName) {
   if (!auth?.token) return false;
   if (isSuperAdmin(auth.user)) return true;
+  if (policyName === "backgroundJobs") return false;
   const required = ACCESS_POLICIES[policyName];
   if (!required?.length) return false;
   const granted = new Set(auth.actionPermissions || []);
